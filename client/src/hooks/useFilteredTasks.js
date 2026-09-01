@@ -24,11 +24,11 @@ export function filterTasks(
     }
 
     if (normalizedFilter === "active") {
-      return !Boolean(task.completed);
+      return !task.completed;
     }
 
     if (normalizedFilter === "completed") {
-      return Boolean(task.completed);
+      return task.completed;
     }
 
     return true;
