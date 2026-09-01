@@ -8,11 +8,18 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 5173,
     proxy: {
-      "/api": "http://localhost:5000",
+      "/api": {
+        target: "http://localhost:5000",
+        changeOrigin: true,
+      },
     },
   },
   preview: {
     host: "0.0.0.0",
     port: 4173,
+  },
+  build: {
+    outDir: "dist",
+    sourcemap: false,
   },
 });
