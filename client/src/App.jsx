@@ -8,11 +8,17 @@ import { useTasks } from './hooks/useTasks.js'
 import { useDraftState } from './hooks/useDraftState.js'
 import { useEditingState } from './hooks/useEditingState.js'
 import { useFilteredTasks } from './hooks/useFilteredTasks.js'
-import { clearSession, loginUser, registerUser } from './services/taskApi.js'
+import { logoutUser, loginUser, registerUser, getAuthToken } from './services/taskApi.js'
 
 function App() {
   const [authMode, setAuthMode] = useState('login')
-  const [authForm, setAuthForm] = useState({ name: '', username: '', password: '' })
+  const [authForm, setAuthForm] = useState({ 
+    name: '', 
+    username: '', 
+    email: '',
+    password: '', 
+    confirmPassword: ''
+  })
   const [authError, setAuthError] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
   const [user, setUser] = useState(() => {
@@ -24,12 +30,15 @@ function App() {
     }
   })
   const [token, setToken] = useState(() => localStorage.getItem('taskAuthToken') || '')
+  const [refreshToken, setRefreshToken] = useState(() => localStorage.getItem('taskRefreshToken') || '')
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
 
   const { tasks, loading, error, loadTasks, addTask, toggleTask, updateTask, deleteTask } = useTasks()
   const { title, setTitle, dueDate, setDueDate, priority, setPriority, clearDraft } = useDraftState()
   const { editingTaskId, editingTitle, setEditingTitle, editingDueDate, setEditingDueDate, editingPriority, setEditingPriority, startEditing, cancelEditing } = useEditingState()
   const { filter, setFilter, searchTerm, setSearchTerm, filteredTasks } = useFilteredTasks(tasks)
 
+  // Load tasks when token changes
   useEffect(() => {
     if (token) {
       loadTasks('')
@@ -38,6 +47,59 @@ function App() {
 
   const handleAuthChange = (field, value) => {
     setAuthForm((current) => ({ ...current, [field]: value }))
+    // Clear error when user starts typing
+    setAuthError('')
+  }
+
+  const validateRegistration = () => {
+    const { name, username, email, password, confirmPassword } = authForm
+    
+    if (!name.trim() || !username.trim() || !email.trim() || !password || !confirmPassword) {
+      setAuthError('All fields are required')
+      return false
+    }
+
+    if (username.length < 3 || username.length > 30) {
+      setAuthError('Username must be between 3 and 30 characters')
+      return false
+    }
+
+    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+      setAuthError('Please enter a valid email address')
+      return false
+    }
+
+    if (password.length < 8) {
+      setAuthError('Password must be at least 8 characters')
+      return false
+    }
+
+    if (!/[A-Z]/.test(password)) {
+      setAuthError('Password must contain at least one uppercase letter')
+      return false
+    }
+
+    if (!/[a-z]/.test(password)) {
+      setAuthError('Password must contain at least one lowercase letter')
+      return false
+    }
+
+    if (!/[0-9]/.test(password)) {
+      setAuthError('Password must contain at least one number')
+      return false
+    }
+
+    if (!/[!@#$%^&*]/.test(password)) {
+      setAuthError('Password must contain at least one special character (!@#$%^&*)')
+      return false
+    }
+
+    if (password !== confirmPassword) {
+      setAuthError('Passwords do not match')
+      return false
+    }
+
+    return true
   }
 
   const handleAuthSubmit = async (event) => {
@@ -46,38 +108,65 @@ function App() {
     setAuthLoading(true)
 
     try {
-      const payload = {
-        ...(authMode === 'register' ? { name: authForm.name.trim() } : {}),
-        username: authForm.username.trim(),
-        password: authForm.password,
+      if (authMode === 'register') {
+        if (!validateRegistration()) {
+          setAuthLoading(false)
+          return
+        }
+
+        const payload = {
+          name: authForm.name.trim(),
+          username: authForm.username.trim(),
+          email: authForm.email.trim(),
+          password: authForm.password,
+          confirmPassword: authForm.confirmPassword,
+        }
+
+        const response = await registerUser(payload)
+        setUser(response.user)
+        setToken(localStorage.getItem('taskAuthToken') || '')
+        setRefreshToken(localStorage.getItem('taskRefreshToken') || '')
+        setAuthForm({ name: '', username: '', email: '', password: '', confirmPassword: '' })
+      } else {
+        if (!authForm.username.trim() || !authForm.password) {
+          setAuthError('Username and password are required')
+          setAuthLoading(false)
+          return
+        }
+
+        const payload = {
+          username: authForm.username.trim(),
+          password: authForm.password,
+        }
+
+        const response = await loginUser(payload)
+        setUser(response.user)
+        setToken(localStorage.getItem('taskAuthToken') || '')
+        setRefreshToken(localStorage.getItem('taskRefreshToken') || '')
+        setAuthForm({ name: '', username: '', email: '', password: '', confirmPassword: '' })
       }
-
-      const response =
-        authMode === 'login'
-          ? await loginUser(payload)
-          : await registerUser(payload)
-
-      setUser(response.user)
-      setToken(localStorage.getItem('taskAuthToken') || '')
     } catch (requestError) {
-      setAuthError(requestError.message)
+      setAuthError(requestError.message || 'Authentication failed')
     } finally {
       setAuthLoading(false)
     }
   }
 
-  const handleLogout = () => {
-    clearSession()
+  const handleLogout = async () => {
+    await logoutUser(refreshToken)
     setUser(null)
     setToken('')
-    setAuthForm({ name: '', username: '', password: '' })
+    setRefreshToken('')
+    setAuthForm({ name: '', username: '', email: '', password: '', confirmPassword: '' })
     setAuthMode('login')
+    setDeleteConfirm(null)
   }
 
   const handleAddTask = async (event) => {
     event.preventDefault()
 
     if (!title.trim()) {
+      alert('Please enter a task title')
       return
     }
 
@@ -102,6 +191,7 @@ function App() {
 
   const handleSaveEdit = async (taskId) => {
     if (!editingTitle.trim()) {
+      alert('Task title cannot be empty')
       return
     }
 
@@ -112,6 +202,11 @@ function App() {
     })
 
     cancelEditing()
+  }
+
+  const confirmDelete = async (taskId) => {
+    setDeleteConfirm(null)
+    await deleteTask(taskId)
   }
 
   const totalTasks = tasks.length
@@ -127,57 +222,106 @@ function App() {
             <h1>{authMode === 'login' ? 'Sign in' : 'Create account'}</h1>
           </div>
 
-          <div className="auth-toggle" aria-label="Authentication mode switcher">
+          <div className="auth-toggle" role="tablist">
             <button
               type="button"
+              role="tab"
+              aria-selected={authMode === 'login'}
               className={authMode === 'login' ? 'auth-toggle-button active' : 'auth-toggle-button'}
-              onClick={() => setAuthMode('login')}
+              onClick={() => {
+                setAuthMode('login')
+                setAuthError('')
+              }}
             >
               Login
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={authMode === 'register'}
               className={authMode === 'register' ? 'auth-toggle-button active' : 'auth-toggle-button'}
-              onClick={() => setAuthMode('register')}
+              onClick={() => {
+                setAuthMode('register')
+                setAuthError('')
+              }}
             >
               Register
             </button>
           </div>
 
-          <form onSubmit={handleAuthSubmit} className="auth-form">
+          <form onSubmit={handleAuthSubmit} className="auth-form" noValidate>
             {authMode === 'register' && (
-              <label>
+              <label htmlFor="name">
                 <span>Name</span>
                 <input
+                  id="name"
                   type="text"
                   value={authForm.name}
-                  placeholder="Your name"
+                  placeholder="Your full name"
                   onChange={(event) => handleAuthChange('name', event.target.value)}
+                  required
+                  disabled={authLoading}
                 />
               </label>
             )}
 
-            <label>
+            <label htmlFor="username">
               <span>Username</span>
               <input
+                id="username"
                 type="text"
                 value={authForm.username}
-                placeholder={authMode === 'login' ? 'Enter your username' : 'Choose a username'}
+                placeholder={authMode === 'login' ? 'Enter your username' : 'Choose a username (3-30 characters)'}
                 onChange={(event) => handleAuthChange('username', event.target.value)}
+                required
+                disabled={authLoading}
               />
             </label>
 
-            <label>
+            {authMode === 'register' && (
+              <label htmlFor="email">
+                <span>Email</span>
+                <input
+                  id="email"
+                  type="email"
+                  value={authForm.email}
+                  placeholder="your.email@example.com"
+                  onChange={(event) => handleAuthChange('email', event.target.value)}
+                  required
+                  disabled={authLoading}
+                />
+              </label>
+            )}
+
+            <label htmlFor="password">
               <span>Password</span>
               <input
+                id="password"
                 type="password"
                 value={authForm.password}
-                placeholder="Enter your password"
+                placeholder={authMode === 'login' ? 'Enter your password' : 'Strong password (min 8 chars, uppercase, lowercase, number, special char)'}
                 onChange={(event) => handleAuthChange('password', event.target.value)}
+                required
+                disabled={authLoading}
               />
             </label>
 
-            {authError && <p className="auth-error">{authError}</p>}
+            {authMode === 'register' && (
+              <label htmlFor="confirmPassword">
+                <span>Confirm Password</span>
+                <input
+                  id="confirmPassword"
+                  type="password"
+                  value={authForm.confirmPassword}
+                  placeholder="Confirm your password"
+                  onChange={(event) => handleAuthChange('confirmPassword', event.target.value)}
+                  required
+                  disabled={authLoading}
+                />
+              </label>
+            )}
+
+            {authError && <p className="auth-error" role="alert">{authError}</p>}
 
             <button type="submit" className="auth-submit" disabled={authLoading}>
               {authLoading ? 'Please wait...' : authMode === 'login' ? 'Login' : 'Register'}
@@ -197,8 +341,15 @@ function App() {
         </div>
 
         <div className="user-panel">
-          <span>Welcome, {user.name || user.username}</span>
-          <button type="button" className="logout-button" onClick={handleLogout}>Logout</button>
+          <span>Welcome, <strong>{user.name || user.username}</strong></span>
+          <button 
+            type="button" 
+            className="logout-button" 
+            onClick={handleLogout}
+            aria-label="Log out from your account"
+          >
+            Logout
+          </button>
         </div>
 
         <div className="stats-grid">
@@ -239,26 +390,54 @@ function App() {
         <TaskFilters filter={filter} onFilterChange={setFilter} />
       </div>
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
 
       {loading ? (
-        <p className="loading-state">Loading tasks...</p>
+        <p className="loading-state" aria-busy="true">Loading tasks...</p>
+      ) : filteredTasks.length === 0 ? (
+        <p className="empty-state">
+          {searchTerm ? 'No tasks match your search.' : 'No tasks yet. Create one to get started!'}
+        </p>
       ) : (
-        <TaskList
-          tasks={filteredTasks}
-          editingTaskId={editingTaskId}
-          editingTitle={editingTitle}
-          editingDueDate={editingDueDate}
-          editingPriority={editingPriority}
-          onEditingTitleChange={setEditingTitle}
-          onEditingDueDateChange={setEditingDueDate}
-          onEditingPriorityChange={setEditingPriority}
-          onToggle={toggleTask}
-          onStartEditing={startEditing}
-          onSave={handleSaveEdit}
-          onCancel={cancelEditing}
-          onDelete={deleteTask}
-        />
+        <>
+          {deleteConfirm && (
+            <div className="delete-confirmation" role="alertdialog" aria-labelledby="delete-confirm-title">
+              <div className="confirmation-content">
+                <h3 id="delete-confirm-title">Delete Task?</h3>
+                <p>This action cannot be undone.</p>
+                <div className="confirmation-buttons">
+                  <button 
+                    onClick={() => confirmDelete(deleteConfirm)}
+                    className="delete-btn"
+                  >
+                    Delete
+                  </button>
+                  <button 
+                    onClick={() => setDeleteConfirm(null)}
+                    className="cancel-btn"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          <TaskList
+            tasks={filteredTasks}
+            editingTaskId={editingTaskId}
+            editingTitle={editingTitle}
+            editingDueDate={editingDueDate}
+            editingPriority={editingPriority}
+            onEditingTitleChange={setEditingTitle}
+            onEditingDueDateChange={setEditingDueDate}
+            onEditingPriorityChange={setEditingPriority}
+            onToggle={toggleTask}
+            onStartEditing={startEditing}
+            onSave={handleSaveEdit}
+            onCancel={cancelEditing}
+            onDelete={(taskId) => setDeleteConfirm(taskId)}
+          />
+        </>
       )}
     </main>
   )
