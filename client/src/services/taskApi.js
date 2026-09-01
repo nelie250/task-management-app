@@ -22,7 +22,7 @@ const fetchWithTimeout = async (
   }
 };
 
-const getAuthToken = () => {
+export const getAuthToken = () => {
   try {
     return localStorage.getItem("taskAuthToken") || "";
   } catch {
