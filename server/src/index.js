@@ -4,11 +4,13 @@ const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const path = require("path");
 const fs = require("fs");
+
+// Load environment variables before importing modules that depend on them.
+dotenv.config();
+
 const tasksRouter = require("./routes/tasks");
 const authRouter = require("./routes/auth");
-const { authMiddleware, requireRole } = require("./middleware/auth");
-
-dotenv.config();
+const { authMiddleware } = require("./middleware/auth");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -40,7 +42,6 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api/tasks", authMiddleware, tasksRouter);
-app.use("/api/admin", authMiddleware, requireRole("admin"));
 
 const clientDistPath = path.join(__dirname, "../../client/dist");
 if (fs.existsSync(clientDistPath)) {
@@ -56,16 +57,21 @@ if (fs.existsSync(clientDistPath)) {
 }
 
 // Error handling middleware
-app.use((err, req, res, next) => {
+app.use((err, _req, res, _next) => {
   console.error("Error:", err);
   const status = err.status || 500;
   const message =
     NODE_ENV === "production" ? "Internal server error" : err.message;
-  res.status(status).json({ message, error: err.message });
+  res.status(status).json({ message });
 });
 
 if (!MONGO_URI) {
   console.error("MONGO_URI is missing. Add it to server/.env");
+  process.exit(1);
+}
+
+if (!process.env.JWT_SECRET) {
+  console.error("JWT_SECRET is missing. Add it to server/.env");
   process.exit(1);
 }
 

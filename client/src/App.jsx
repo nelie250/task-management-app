@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import TaskFilters from './components/TaskFilters.jsx'
 import TaskForm from './components/TaskForm.jsx'
@@ -8,7 +8,7 @@ import { useTasks } from './hooks/useTasks.js'
 import { useDraftState } from './hooks/useDraftState.js'
 import { useEditingState } from './hooks/useEditingState.js'
 import { useFilteredTasks } from './hooks/useFilteredTasks.js'
-import { logoutUser, loginUser, registerUser, getAuthToken } from './services/taskApi.js'
+import { logoutUser, loginUser, registerUser } from './services/taskApi.js'
 
 function App() {
   const [authMode, setAuthMode] = useState('login')
@@ -32,6 +32,9 @@ function App() {
   const [token, setToken] = useState(() => localStorage.getItem('taskAuthToken') || '')
   const [refreshToken, setRefreshToken] = useState(() => localStorage.getItem('taskRefreshToken') || '')
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
+  const accountMenuRef = useRef(null)
 
   const { tasks, loading, error, loadTasks, addTask, toggleTask, updateTask, deleteTask } = useTasks()
   const { title, setTitle, dueDate, setDueDate, priority, setPriority, clearDraft } = useDraftState()
@@ -44,6 +47,36 @@ function App() {
       loadTasks('')
     }
   }, [token, loadTasks])
+
+  useEffect(() => {
+    if (!deleteConfirm) return undefined
+
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape' && !isDeleting) setDeleteConfirm(null)
+    }
+
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [deleteConfirm, isDeleting])
+
+  useEffect(() => {
+    const closeAccountMenu = (event) => {
+      if (event.key === 'Escape') setIsAccountMenuOpen(false)
+    }
+
+    const closeOnOutsideClick = (event) => {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(event.target)) {
+        setIsAccountMenuOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', closeAccountMenu)
+    window.addEventListener('mousedown', closeOnOutsideClick)
+    return () => {
+      window.removeEventListener('keydown', closeAccountMenu)
+      window.removeEventListener('mousedown', closeOnOutsideClick)
+    }
+  }, [])
 
   const handleAuthChange = (field, value) => {
     setAuthForm((current) => ({ ...current, [field]: value }))
@@ -64,7 +97,7 @@ function App() {
       return false
     }
 
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setAuthError('Please enter a valid email address')
       return false
     }
@@ -160,6 +193,7 @@ function App() {
     setAuthForm({ name: '', username: '', email: '', password: '', confirmPassword: '' })
     setAuthMode('login')
     setDeleteConfirm(null)
+    setIsAccountMenuOpen(false)
   }
 
   const handleAddTask = async (event) => {
@@ -170,23 +204,18 @@ function App() {
       return
     }
 
-    await addTask({
+    const createdTask = await addTask({
       title: title.trim(),
       dueDate,
       priority,
     })
 
-    clearDraft()
+    if (createdTask) clearDraft()
   }
 
   const handleSearch = async (event) => {
     event.preventDefault()
     await loadTasks(searchTerm)
-  }
-
-  const handleClearSearch = async () => {
-    setSearchTerm('')
-    await loadTasks('')
   }
 
   const handleSaveEdit = async (taskId) => {
@@ -195,23 +224,28 @@ function App() {
       return
     }
 
-    await updateTask(taskId, {
+    const updatedTask = await updateTask(taskId, {
       title: editingTitle.trim(),
       dueDate: editingDueDate,
       priority: editingPriority,
     })
 
-    cancelEditing()
+    if (updatedTask) cancelEditing()
   }
 
   const confirmDelete = async (taskId) => {
-    setDeleteConfirm(null)
+    setIsDeleting(true)
     await deleteTask(taskId)
+    setIsDeleting(false)
+    setDeleteConfirm(null)
   }
 
   const totalTasks = tasks.length
   const activeTasks = tasks.filter((task) => !task.completed).length
   const completedTasks = tasks.filter((task) => task.completed).length
+  const taskPendingDeletion = tasks.find((task) => task._id === deleteConfirm)
+  const displayName = String(user?.name || user?.username || '').trim()
+  const userInitial = displayName.charAt(0).toUpperCase() || 'U'
 
   if (!token || !user) {
     return (
@@ -335,21 +369,42 @@ function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div>
-          <p className="eyebrow">Full-Stack Task Management System</p>
+        <div className="brand-block">
+          <p className="eyebrow">Your workspace</p>
           <h1>Task Flow</h1>
+          <p className="subtitle">Keep your day clear, focused, and moving forward.</p>
         </div>
 
-        <div className="user-panel">
-          <span>Welcome, <strong>{user.name || user.username}</strong></span>
-          <button 
-            type="button" 
-            className="logout-button" 
-            onClick={handleLogout}
-            aria-label="Log out from your account"
+        <div className="account-menu" ref={accountMenuRef}>
+          <button
+            type="button"
+            className="avatar-button"
+            onClick={() => setIsAccountMenuOpen((open) => !open)}
+            aria-label="Open account menu"
+            aria-expanded={isAccountMenuOpen}
+            aria-haspopup="menu"
           >
-            Logout
+            <span aria-hidden="true">{userInitial}</span>
           </button>
+          {isAccountMenuOpen && (
+            <div className="account-popover" role="menu">
+              <div className="account-identity">
+                <span className="account-avatar" aria-hidden="true">{userInitial}</span>
+                <div>
+                  <strong>{displayName}</strong>
+                  <span>@{user.username}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="logout-button"
+                onClick={handleLogout}
+                role="menuitem"
+              >
+                Log out
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="stats-grid">
@@ -368,8 +423,6 @@ function App() {
         </div>
       </header>
 
-      <p className="subtitle">React + Node + MongoDB workspace for planning, tracking, and completing work efficiently.</p>
-
       <TaskForm
         title={title}
         dueDate={dueDate}
@@ -385,10 +438,53 @@ function App() {
           searchTerm={searchTerm}
           onSearchTermChange={setSearchTerm}
           onSubmit={handleSearch}
-          onClear={handleClearSearch}
         />
         <TaskFilters filter={filter} onFilterChange={setFilter} />
       </div>
+
+      {deleteConfirm && (
+        <div
+          className="delete-confirmation"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isDeleting) setDeleteConfirm(null)
+          }}
+        >
+          <section
+            className="confirmation-content"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-confirm-title"
+            aria-describedby="delete-confirm-description"
+          >
+            <div className="confirmation-icon" aria-hidden="true">!</div>
+            <p className="confirmation-kicker">Permanent action</p>
+            <h2 id="delete-confirm-title">Delete this task?</h2>
+            <p id="delete-confirm-description">
+              {taskPendingDeletion ? <>“{taskPendingDeletion.title}” will be permanently removed.</> : 'This task will be permanently removed.'}
+            </p>
+            <div className="confirmation-buttons">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm(null)}
+                className="cancel-btn"
+                disabled={isDeleting}
+                autoFocus
+              >
+                Keep task
+              </button>
+              <button
+                type="button"
+                onClick={() => confirmDelete(deleteConfirm)}
+                className="delete-btn"
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting…' : 'Delete task'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {error && <p className="error" role="alert">{error}</p>}
 
@@ -400,28 +496,6 @@ function App() {
         </p>
       ) : (
         <>
-          {deleteConfirm && (
-            <div className="delete-confirmation" role="alertdialog" aria-labelledby="delete-confirm-title">
-              <div className="confirmation-content">
-                <h3 id="delete-confirm-title">Delete Task?</h3>
-                <p>This action cannot be undone.</p>
-                <div className="confirmation-buttons">
-                  <button 
-                    onClick={() => confirmDelete(deleteConfirm)}
-                    className="delete-btn"
-                  >
-                    Delete
-                  </button>
-                  <button 
-                    onClick={() => setDeleteConfirm(null)}
-                    className="cancel-btn"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
           <TaskList
             tasks={filteredTasks}
             editingTaskId={editingTaskId}

@@ -13,7 +13,7 @@ const formatDate = (dateValue) => {
       month: 'short', 
       day: 'numeric' 
     })
-  } catch (error) {
+  } catch {
     return 'Invalid date'
   }
 }
@@ -106,7 +106,7 @@ function TaskItem({
             type="button" 
             onClick={() => onToggle(task._id)}
             className="toggle-btn"
-            aria-label={task.completed ? `Mark \"${task.title}\" as incomplete` : `Mark \"${task.title}\" as complete`}
+            aria-label={task.completed ? `Mark "${task.title}" as incomplete` : `Mark "${task.title}" as complete`}
             title={task.completed ? 'Mark as incomplete' : 'Mark as complete'}
           >
             {task.completed ? '✓' : '○'}
@@ -125,7 +125,7 @@ function TaskItem({
               type="button" 
               onClick={() => onStartEditing(task)}
               className="edit-btn"
-              aria-label={`Edit \"${task.title}\"`}
+              aria-label={`Edit "${task.title}"`}
             >
               Edit
             </button>
@@ -133,7 +133,7 @@ function TaskItem({
               type="button" 
               onClick={() => onDelete(task._id)}
               className="delete-btn"
-              aria-label={`Delete \"${task.title}\"`}
+              aria-label={`Delete "${task.title}"`}
             >
               Delete
             </button>

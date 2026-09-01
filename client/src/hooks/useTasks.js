@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import {
   createTask,
   deleteTaskById,
@@ -55,12 +55,14 @@ export function useTasks() {
       setTasks((prev) =>
         prev.map((t) => (t._id === tempTask._id ? created : t))
       );
+      return created;
     } catch (err) {
       setError(err.message);
       // Remove temp task on error
       setTasks((prev) =>
         prev.filter((t) => !t._id.startsWith("temp-"))
       );
+      return null;
     }
   }, []);
 
@@ -96,11 +98,14 @@ export function useTasks() {
       );
 
       // Actually update on server
-      await updateTaskById(taskId, taskData);
+      const updated = await updateTaskById(taskId, taskData);
+      setTasks((prev) => prev.map((t) => (t._id === taskId ? updated : t)));
+      return updated;
     } catch (err) {
       setError(err.message);
       // Reload if error
       await loadTasks("", pagination.page);
+      return null;
     }
   }, [loadTasks, pagination.page]);
 
@@ -123,37 +128,6 @@ export function useTasks() {
       await loadTasks("", pagination.page);
     }
   }, [loadTasks, pagination.page, tasks.length]);
-
-  // Initial load
-  useEffect(() => {
-    let isActive = true;
-
-    const fetchInitialTasks = async () => {
-      try {
-        const data = await getTasks("", 1, pagination.limit);
-        if (isActive) {
-          setTasks(data.tasks || data);
-          if (data.pagination) {
-            setPagination(data.pagination);
-          }
-        }
-      } catch (err) {
-        if (isActive) {
-          setError(err.message);
-        }
-      } finally {
-        if (isActive) {
-          setLoading(false);
-        }
-      }
-    };
-
-    fetchInitialTasks();
-
-    return () => {
-      isActive = false;
-    };
-  }, [pagination.limit]);
 
   return {
     tasks,

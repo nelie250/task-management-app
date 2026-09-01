@@ -1,4 +1,4 @@
-function SearchForm({ searchTerm, onSearchTermChange, onSubmit, onClear }) {
+function SearchForm({ searchTerm, onSearchTermChange, onSubmit }) {
   return (
     <form className="search-form" onSubmit={onSubmit}>
       <div className="search-input-wrapper">
@@ -16,16 +16,6 @@ function SearchForm({ searchTerm, onSearchTermChange, onSubmit, onClear }) {
       <div className="search-actions">
         <button type="submit" className="search-btn" aria-label="Search for tasks">
           Search
-        </button>
-        <button 
-          type="button" 
-          onClick={onClear}
-          className="clear-btn"
-          disabled={!searchTerm}
-          aria-label="Clear search"
-          title="Clear search filter"
-        >
-          Clear
         </button>
       </div>
     </form>

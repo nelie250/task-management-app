@@ -94,7 +94,13 @@ export const loginUser = async ({ username, password }) => {
     body: JSON.stringify({ username, password }),
   });
 
-  const data = await response.json();
+  let data;
+  try {
+    const text = await response.text();
+    data = text ? JSON.parse(text) : {};
+  } catch (error) {
+    throw new Error("Server returned invalid response", { cause: error });
+  }
 
   if (!response.ok) {
     throw new Error(data.message || "Login failed");
@@ -121,7 +127,13 @@ export const registerUser = async ({
     body: JSON.stringify({ name, username, email, password, confirmPassword }),
   });
 
-  const data = await response.json();
+  let data;
+  try {
+    const text = await response.text();
+    data = text ? JSON.parse(text) : {};
+  } catch (error) {
+    throw new Error("Server returned invalid response", { cause: error });
+  }
 
   if (!response.ok) {
     const errorMsg =
@@ -142,9 +154,23 @@ const authHeaders = (extraHeaders = {}) => {
   };
 };
 
+const getErrorMessage = async (response, fallback) => {
+  try {
+    const data = await response.clone().json();
+    return data.message || fallback;
+  } catch {
+    return fallback;
+  }
+};
+
 const handleAuthError = async (response) => {
   if (response.status === 401) {
-    const data = await response.json();
+    let data = {};
+    try {
+      data = await response.json();
+    } catch {
+      // Fall through to clearing an invalid session.
+    }
     if (data.code === "TOKEN_EXPIRED") {
       const refreshed = await refreshAuthToken();
       if (refreshed) {
@@ -172,7 +198,7 @@ export const getTasks = async (query = "", page = 1, limit = 20) => {
     if (authResult === "token_refreshed") {
       return getTasks(query, page, limit);
     }
-    throw new Error("Could not load tasks");
+    throw new Error(await getErrorMessage(response, "Could not load tasks"));
   }
 
   return response.json();
@@ -190,7 +216,7 @@ export const createTask = async (taskData) => {
     if (authResult === "token_refreshed") {
       return createTask(taskData);
     }
-    throw new Error("Could not create task");
+    throw new Error(await getErrorMessage(response, "Could not create task"));
   }
 
   return response.json();
@@ -210,7 +236,7 @@ export const toggleTaskById = async (taskId) => {
     if (authResult === "token_refreshed") {
       return toggleTaskById(taskId);
     }
-    throw new Error("Could not update task");
+    throw new Error(await getErrorMessage(response, "Could not update task"));
   }
 
   return response.json();
@@ -228,7 +254,7 @@ export const updateTaskById = async (taskId, taskData) => {
     if (authResult === "token_refreshed") {
       return updateTaskById(taskId, taskData);
     }
-    throw new Error("Could not edit task");
+    throw new Error(await getErrorMessage(response, "Could not edit task"));
   }
 
   return response.json();
@@ -245,7 +271,7 @@ export const deleteTaskById = async (taskId) => {
     if (authResult === "token_refreshed") {
       return deleteTaskById(taskId);
     }
-    throw new Error("Could not delete task");
+    throw new Error(await getErrorMessage(response, "Could not delete task"));
   }
 
   return response.json();

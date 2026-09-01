@@ -4,9 +4,7 @@ const {
   generateTokens,
   verifyRefreshToken,
   authMiddleware,
-  JWT_SECRET,
 } = require("../middleware/auth");
-const jwt = require("jsonwebtoken");
 
 const router = express.Router();
 
@@ -37,7 +35,7 @@ router.post("/register", async (req, res) => {
   try {
     const { name, username, email, password, confirmPassword } = req.body;
 
-    if (!name || !username || !email || !password) {
+    if (!name || !username || !email || !password || !confirmPassword) {
       return res
         .status(400)
         .json({ message: "Name, username, email, and password are required." });
@@ -47,7 +45,7 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ message: "Passwords do not match." });
     }
 
-    const passwordErrors = validatePassword(password);
+    const passwordErrors = validatePassword(String(password));
     if (passwordErrors.length > 0) {
       return res
         .status(400)
@@ -167,7 +165,7 @@ router.post("/refresh", async (req, res) => {
     }
 
     const decoded = verifyRefreshToken(refreshToken);
-    if (!decoded || !decoded.id) {
+    if (!decoded || !decoded.id || decoded.type !== "refresh") {
       return res
         .status(401)
         .json({ message: "Invalid or expired refresh token." });

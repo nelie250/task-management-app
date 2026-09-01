@@ -10,7 +10,7 @@ const getPaginationParams = (query) => {
   return { page, limit, skip: (page - 1) * limit };
 };
 
-const validateTaskPayload = (title, priority, dueDate) => {
+const validateTaskPayload = (title, priority, dueDate, description) => {
   const trimmedTitle = String(title ?? "").trim();
 
   if (!trimmedTitle) {
@@ -25,11 +25,23 @@ const validateTaskPayload = (title, priority, dueDate) => {
     throw new Error("Priority must be low, medium, or high.");
   }
 
+  if (description != null && String(description).trim().length > 1000) {
+    throw new Error("Description cannot exceed 1000 characters.");
+  }
+
   // Validate due date if provided
   if (dueDate) {
-    const date = new Date(dueDate);
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(dueDate))
+      ? new Date(`${dueDate}T00:00:00`)
+      : new Date(dueDate);
     if (isNaN(date.getTime())) {
       throw new Error("Invalid due date format.");
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (date < today) {
+      throw new Error("Due date cannot be in the past.");
     }
   }
 };
@@ -87,7 +99,7 @@ router.post("/", async (req, res) => {
     const { title, dueDate, priority, description } = req.body;
     const userId = req.user.id;
 
-    validateTaskPayload(title, priority, dueDate);
+    validateTaskPayload(title, priority, dueDate, description);
 
     const task = await Task.create({
       userId,
@@ -113,7 +125,7 @@ router.put("/:id", async (req, res) => {
     const { title, dueDate, priority, description } = req.body;
     const userId = req.user.id;
 
-    validateTaskPayload(title, priority, dueDate);
+    validateTaskPayload(title, priority, dueDate, description);
 
     // Ensure user owns the task
     const task = await Task.findById(req.params.id);

@@ -3,7 +3,7 @@
   line-height: 1.5;
   font-weight: 400;
   color: #1b2430;
-  background: linear-gradient(180deg, #edf5f2 0%, #f4f7f9 100%);
+  background: #f5f7fb;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -27,10 +27,41 @@ body {
     #f5f7fa;
 }
 
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  z-index: -1;
+  width: 32rem;
+  height: 32rem;
+  border-radius: 50%;
+  filter: blur(10px);
+  opacity: 0.55;
+}
+
+body::before {
+  top: -16rem;
+  left: -12rem;
+  background: #bce6d7;
+}
+
+body::after {
+  right: -14rem;
+  bottom: -18rem;
+  background: #cbdcf7;
+}
+
 button,
 input,
 select {
   font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid rgba(21, 128, 102, 0.34);
+  outline-offset: 2px;
 }
 
 #root {
